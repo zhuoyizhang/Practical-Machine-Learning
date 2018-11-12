@@ -1,0 +1,112 @@
+---
+title: "Machine Learning Project Writeup"
+author: "Zhuoyi Zhang"
+date: "November 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+#Executive summary
+The goal of analysis is to predict the manner in which the six participants did the exercise. This is the "classe" variable in the training set. Random Forest model is being used to predict the "classe" and the accuracy is above 98%.  This analysis splits the training and testing set into training/testing/validation set and tune the "ntree" variable to increase the speed of the model.
+In the end, this model predicts correctly (20/20) on the validation set.
+
+
+##cite  The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har. 
+
+#Data cleaning
+##Data structure
+1. Four inertial measurement units (IMU)
+2. Each IMU provides three-axes acceleration, gyroscope and magnetometer data at a joint sampling rate of 45 Hz. So there are 12 metrics per IMU.
+3. There are 48 raw metrics for all IMUs.
+
+##Feature extraction
+1. A sliding window approach is used on this dataset for feature extraction.  As a result, each time window has 23 rows. 
+2. There are 96 features calculated for each time window.
+
+##Data cleaning solution
+The test dataset indicates that I should use the raw measures to predict the classe rather than the 96 features. So I removed the features from the training and testing set.
+
+Leave "num window" as the id to correlate between training and test set
+Only keep "num window", roll, pitch, yay, total accel and 9 raw metrics for all the four IMUs.
+
+Take out problem id in test set
+
+
+```{r}
+validation = read.csv("./pml-testing.csv")
+training = read.csv("./pml-training.csv")
+
+new_training = training[,c(7, 8:11,37:45,46:49, 60:68,84:86,102, 113:121,122:124,140,151:159,160)]
+new_validation = validation[,c(7, 8:11,37:45,46:49, 60:68,84:86,102, 113:121,122:124,140,151:159)]
+
+
+```
+
+
+#Cross validation
+Because test set only has 20 observations, I can only run the prediction on it once to avoid overfitting on testset. In order to get a sense of the accuracy of the model before applying the model on the validation set, I split the training set into training set and test set by 7:3 ratio.
+
+```{r}
+library(caret)
+
+inTrain<-createDataPartition(y=new_training$classe,p=0.7,list=FALSE)
+training_1<-new_training[inTrain,]
+testing_1<-new_training[-inTrain,]
+
+
+
+
+```
+
+
+#Modeling process
+Use Random Forest approach. The reason why I choose Random forest is that Random Forest is hard to build a “bad” model, because of its simplicity. Random Forests are also very hard to beat in terms of performance.  It is a simple and and flexible go to model in many cases.
+However, the the speed of the model is very slow when the ntree is large. I compromised the accurary by tuning ntree to 4 which takes 10 minutes to run the model.
+As a result, the accuracy is still very good. 
+
+```{r cached_rf, cache=TRUE}
+
+modFit<-train(classe~.,data=training_1, method="rf"，ntree=4, prox=TRUE)
+pred<-predict(modFit,testing_1)
+
+#test$predRight <- pred==testing_1$classe
+result <-table(pred, testing_1$classe)
+
+accuracy <-( result[1,1] +result[2,2]+result[3,3]+result[4,4]+result[5,5])/dim(testing_1)[1]
+
+```
+Accuracy is `r accuracy*100` percent.
+
+
+#Predict the validation set by this model
+```{r}
+
+validationset<-predict(modFit,new_validation)
+validationset
+
+```
+
+
+#In sample vs out of sample error
+```{r}
+#In sample error
+pred_insample<-predict(modFit,training_1)
+
+result_insample <-table(pred_insample, training_1$classe)
+
+accuracy_insample <-( result_insample[1,1] +result_insample[2,2]+result_insample[3,3]+result_insample[4,4]+result_insample[5,5])/dim(training_1)[1]
+
+accuracy_outofsample <-accuracy
+
+```
+In sample accuracy is `r accuracy_insample ` and out of sample accuracy is `r accuracy_outofsample`.  The out of sample error rate is `r 1-accuracy_outofsample`
+
+
+#Conclusion
+The random forest approach performs well in predicting how well the participants performed an activity based on quantitative data.  The out of sample error is lower than 1.3%, however, there is still room to improve the performance such as increase the ntree number or use an ensemble method to combine Random Forest with other model.  
+
